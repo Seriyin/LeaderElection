@@ -10,8 +10,10 @@ import pt.haslab.ekit.Clique;
 
 import java.io.*;
 import java.time.Duration;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.LongStream;
 
 public class Main
 {
@@ -26,6 +28,7 @@ public class Main
     private int size;
     private int Async;
     private Runnable r[];
+    private Random rnd;
 
     private Main(Address a[],int id,int size,boolean Async)
     {
@@ -45,8 +48,9 @@ public class Main
         else
             this.Async = 0;
         r = new Runnable[2];
-        r[0]=this::electSync;
-        r[1]=this::electAsync;
+        r[0]=this::executeSync;
+        r[1]=this::executeAsync;
+        rnd = new Random();
     }
 
     public static void main(String []args) throws IOException {
@@ -64,10 +68,32 @@ public class Main
         final boolean Async = Boolean.parseBoolean(bf.readLine());
         System.out.println("Id is : " + id);
         final Main m = new Main(addresses,id,size,Async);
-        m.execute();
+        m.start();
     }
 
-    private void execute() {
+    public void start()
+    {
+        r[Async].run();
+    }
+
+    private void executeAsync() {
+        tc.execute(() -> {
+            c.handler(e, (j,msg)-> {
+                // message handler
+                System.out.println("Int " + j);
+                tc.schedule(Duration.ofMillis(rnd.nextInt(3000)),()->el.join(msg));
+                System.out.println("Joining :" + msg.publicize());
+            }).onException(ex->{
+                // exception handler
+                ex.printStackTrace();
+            });
+
+
+            c.open().thenRun(this::electAsync);
+        }).join();
+    }
+
+    private void executeSync() {
         tc.execute(() -> {
             c.handler(e, (j,msg)-> {
                 // message handler
@@ -80,9 +106,10 @@ public class Main
             });
 
 
-            c.open().thenRun(r[Async]);
+            c.open().thenRun(this::electSync);
         }).join();
     }
+
 
     private void electSync()
     {
